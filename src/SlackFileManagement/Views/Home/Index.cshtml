@@ -1,0 +1,105 @@
+﻿@{
+    ViewData["Title"] = "HomePage";
+}
+@section scripts {
+    <link rel="stylesheet" type="text/css" href="//cdn.datatables.net/1.10.13/css/jquery.dataTables.min.css" />
+    <script type="text/javascript" src="//cdn.datatables.net/1.10.13/js/jquery.dataTables.min.js"></script>
+    <script type="text/javascript" src="//cdn.datatables.net/select/1.2.1/js/dataTables.select.min.js"></script>
+    <script type="text/javascript">
+        $("#hmess").text("Loading data...");
+        setInterval(function () { $("#hmess").fadeToggle(1000); }, 1000);
+
+        $.urlParam = function (name) {
+            var results = new RegExp('[\?&]' + name + '=([^&#]*)').exec(window.location.href);
+            if (results == null) {
+                return null;
+            }
+            else {
+                return results[1] || 0;
+            }
+        }
+
+        $(function () {
+            var uri = "[YOUR_PAGE_URI]"; //Your page uri, most of time the homepage
+            var clientid = '[YOUR_CLIENT_ID]'; //Your client id, from application page
+            var clientsecret = '[YOUR_CLIENT_SECRET]'; // Your client secret, from application page.
+
+           
+            var token = "";
+            var files;
+            //If not authorized
+            if (!$.urlParam('code'))
+            {
+                //Authorization
+                var url = "https://slack.com/oauth/authorize/?client_id=4605731684.158545966166&scope=files:read+files:write:user&redirect_uri=" + uri;
+                window.location.href = url;
+                return;
+            }
+            //Get Token
+            var code = $.urlParam('code');
+            $.getJSON("https://slack.com/api/oauth.access", { client_id: clientid, client_secret: clientsecret, code: code, redirect_uri: uri }, function (response) {
+                token = response.access_token;
+                console.log('token: ' + token);
+                GetFileList(1);
+            });
+            function GetFileList(p)
+            {
+                $("#hmess").text(p+": Loading data files... ");
+                //Get file list
+                $.getJSON("https://slack.com/api/files.list", { token: token, count: 100, page: p }, function (response) {
+                    if (typeof files === 'undefined')
+                        files = response.files;
+                    else
+                        files = files.concat(response.files);
+
+                    console.log(response.paging.page + ":" + response.paging.pages);
+                    if (response.paging.page < response.paging.pages) GetFileList(response.paging.page + 1);
+                    else FinishFileList();
+                });
+
+            }
+            function FinishFileList()
+            {
+                $('#fileListTable tbody').html("");
+                $.each(files,function(key,value){
+                    $('#fileListTable tbody').append("<tr><td><input type='checkbox' name='cbfiles[]' value='"+value.id+"' /></td><td>" + value.id + "</td><td>" + value.name + "</td><td>" + value.size + "</td><td>" + value.mimetype + "</td></tr>\n");
+                });
+                $('#fileListTable').DataTable();
+                $("#hmess").text("");
+                //alert($("input[name=chkboxName]:checked").map(
+                //function () { return this.value; }).get().join(","));
+            }
+
+            $("#btnDelete").click(function () {
+                if (confirm("Are you sure to delete checked files")) {
+                    $("input[name='cbfiles[]']:checked").each(function () {
+                        var fid = this.value;
+                        var cb = this;
+                        $.getJSON("https://slack.com/api/files.delete", { token: token, file: fid }, function (response) { console.log(fid + ":" + response.ok); if (response.ok) $(cb).parent().parent().remove(); });
+                    });
+                    alert("Delete done! Files will still show on list until reopen the page!");
+                }
+            });
+        });
+    </script>
+}
+<h2>@ViewData["Title"].</h2>
+<h3>@ViewData["Message"]</h3>
+<h3 id="hmess" style="color:red"></h3>
+<div id="dataview">
+    <input type="button" value="Delete" id="btnDelete" />
+    <table id="fileListTable" class="display" width="100%">
+        <thead>
+            <tr>
+                <th>_</th>
+                <th>id</th>
+                <th>Name</th>
+                <th>Size</th>
+                <th>MIME</th>
+            </tr>
+        </thead>
+        <tbody>
+
+        </tbody>
+    </table>
+</div>
